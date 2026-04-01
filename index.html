@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>نظام إدارة الأجهزة السحابي</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        /* (نفس تنسيقات CSS السابقة دون تغيير لتوفير المساحة) */
+        :root { --primary: #2563eb; --whatsapp: #25D366; --dark: #1e293b; --white: #ffffff; --radius: 8px; }
+        body { background-color: #f8fafc; font-family: 'Segoe UI', sans-serif; padding: 20px; direction: rtl; }
+        .container { max-width: 800px; margin: 0 auto; background: var(--white); border-radius: var(--radius); box-shadow: 0 4px 6px rgb(0 0 0 / 0.1); overflow: hidden; }
+        header { background: var(--primary); color: var(--white); padding: 20px; text-align: center; }
+        .tabs { display: flex; background: #f1f5f9; }
+        .tab-btn { flex: 1; padding: 15px; border: none; cursor: pointer; font-weight: bold; }
+        .tab-btn.active { color: var(--primary); border-bottom: 3px solid var(--primary); background: #fff; }
+        .tab-content { display: none; padding: 20px; }
+        .tab-content.active { display: block; }
+        .form-group { margin-bottom: 15px; }
+        input, select { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: var(--radius); }
+        .btn { width: 100%; padding: 12px; border: none; border-radius: var(--radius); cursor: pointer; font-weight: bold; color: #fff; margin-top: 10px;}
+        .btn-primary { background: var(--primary); }
+        .btn-success { background: #16a34a; }
+        .btn-wa { background: var(--whatsapp); padding: 5px 10px; text-decoration: none; color: white; border-radius: 5px; font-size: 13px; display: inline-flex; align-items: center; gap: 5px; }
+        .record-card { border: 1px solid #cbd5e1; padding: 15px; margin-bottom: 15px; border-radius: var(--radius); position: relative; }
+        .status-badge { position: absolute; left: 15px; top: 15px; padding: 4px 8px; border-radius: 12px; font-size: 11px; }
+        .active-badge { background: #fef08a; color: #854d0e; }
+        .done-badge { background: #bbf7d0; color: #166534; }
+        .loading-overlay { text-align: center; padding: 20px; color: var(--primary); display: none; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header><h2>نظام العهد الإلكترونية (سحابي)</h2></header>
+    <div class="tabs">
+        <button class="tab-btn active" onclick="switchTab('borrow')">استعارة</button>
+        <button class="tab-btn" onclick="switchTab('return')">العمليات النشطة</button>
+        <button class="tab-btn" onclick="switchTab('history')">السجل</button>
+    </div>
+
+    <div id="borrow" class="tab-content active">
+        <form id="borrowForm">
+            <div class="form-group"><label>المستلم:</label><input type="text" id="recName" required></div>
+            <div class="form-group"><label>رقم هاتف المستلم:</label><input type="tel" id="recPhone" required></div>
+            <div class="form-group"><label>المُسلِّم:</label><input type="text" id="givName" required></div>
+            <div class="form-group"><label>رقم هاتف المُسلِّم:</label><input type="tel" id="givPhone" required></div>
+            <div class="form-group">
+                <label>الجهاز:</label>
+                <select id="deviceName" required>
+                    <option value="TAB1">TAB 1</option>
+                    <option value="TAB2">TAB 2</option>
+                </select>
+            </div>
+            <button type="submit" class="btn btn-primary" id="saveBtn">حفظ في السحابة</button>
+        </form>
+        <div id="waPanel" style="display:none; margin-top:15px; text-align:center; padding:10px; background:#e0f2fe;">
+            <p>تم الحفظ! أرسل واتساب:</p>
+            <a href="#" id="waRec" target="_blank" class="btn-wa">للمستلم</a>
+            <a href="#" id="waGiv" target="_blank" class="btn-wa">للمسلم</a>
+        </div>
+    </div>
+
+    <div id="return" class="tab-content">
+        <div id="loading" class="loading-overlay"><i class="fas fa-spinner fa-spin"></i> جاري التحميل...</div>
+        <div id="activeList"></div>
+    </div>
+
+    <div id="history" class="tab-content">
+        <div id="historyList"></div>
+    </div>
+</div>
+
+<script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, collection, addDoc, getDocs, updateDoc, doc, query, where, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+// Import the functions you need from the SDKs you need
+import { initializeApp } from "firebase/app";
+import { getAnalytics } from "firebase/analytics";
+// TODO: Add SDKs for Firebase products that you want to use
+// https://firebase.google.com/docs/web/setup#available-libraries
+
+// Your web app's Firebase configuration
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyBg4l5LFpt5piDbpfH3-XfV470vrEY_LIQ",
+  authDomain: "device-management-e4049.firebaseapp.com",
+  projectId: "device-management-e4049",
+  storageBucket: "device-management-e4049.firebasestorage.app",
+  messagingSenderId: "93864301196",
+  appId: "1:93864301196:web:7a346a0f44ea17ab4121a9",
+  measurementId: "G-VL6WEGTHVK"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+const analytics = getAnalytics(app);	
+
+    const firebaseConfig = {
+        apiKey: "AIzaSy...", 
+        authDomain: "your-app.firebaseapp.com",
+        projectId: "your-app-id",
+        storageBucket: "your-app.appspot.com",
+        messagingSenderId: "...",
+        appId: "..."
+    };
+
+    // تهيئة Firebase
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // دالة التبديل بين التبويبات
+    window.switchTab = (id) => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        event.currentTarget.classList.add('active');
+        document.getElementById(id).classList.add('active');
+        if(id === 'return') fetchActive();
+        if(id === 'history') fetchHistory();
+    };
+
+    // حفظ استعارة جديدة
+    document.getElementById('borrowForm').onsubmit = async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById('saveBtn');
+        btn.disabled = true;
+        btn.innerText = "جاري الحفظ...";
+
+        const data = {
+            recName: document.getElementById('recName').value,
+            recPhone: document.getElementById('recPhone').value,
+            givName: document.getElementById('givName').value,
+            givPhone: document.getElementById('givPhone').value,
+            device: document.getElementById('deviceName').value,
+            date: new Date().toLocaleDateString('en-GB'),
+            timestamp: Date.now(),
+            status: 'active'
+        };
+
+        try {
+            await addDoc(collection(db, "borrowings"), data);
+            
+            // روابط الواتساب
+            const msg = `تأكيد استعارة: جهاز ${data.device} بعهدة ${data.recName} بتاريخ ${data.date}`;
+            document.getElementById('waRec').href = `https://wa.me/968${data.recPhone}?text=${encodeURIComponent(msg)}`;
+            document.getElementById('waGiv').href = `https://wa.me/968${data.givPhone}?text=${encodeURIComponent(msg)}`;
+            document.getElementById('waPanel').style.display = 'block';
+            
+            e.target.reset();
+            alert("تم الحفظ في السحابة بنجاح!");
+        } catch (error) {
+            console.error(error);
+            alert("حدث خطأ في الاتصال بالسحابة");
+        }
+        btn.disabled = false;
+        btn.innerText = "حفظ في السحابة";
+    };
+
+    // جلب العمليات النشطة
+    async function fetchActive() {
+        const list = document.getElementById('activeList');
+        const loader = document.getElementById('loading');
+        loader.style.display = 'block';
+        list.innerHTML = '';
+
+        const q = query(collection(db, "borrowings"), where("status", "==", "active"), orderBy("timestamp", "desc"));
+        const snapshot = await getDocs(q);
+        
+        loader.style.display = 'none';
+        snapshot.forEach(docSnap => {
+            const r = docSnap.data();
+            const div = document.createElement('div');
+            div.className = 'record-card';
+            div.innerHTML = `
+                <span class="status-badge active-badge">نشط</span>
+                <p><strong>الجهاز:</strong> ${r.device}</p>
+                <p><strong>المستلم:</strong> ${r.recName} (${r.recPhone})</p>
+                <p><strong>التاريخ:</strong> ${r.date}</p>
+                <button class="btn btn-success" onclick="markAsReturned('${docSnap.id}', '${r.recPhone}', '${r.device}')">تأكيد الإرجاع</button>
+            `;
+            list.appendChild(div);
+        });
+    }
+
+    // إرجاع الجهاز
+    window.markAsReturned = async (docId, phone, device) => {
+        if(!confirm("تأكيد استلام الجهاز؟")) return;
+        const docRef = doc(db, "borrowings", docId);
+        await updateDoc(docRef, { 
+            status: 'completed',
+            returnDate: new Date().toLocaleDateString('en-GB')
+        });
+        alert("تم الإرجاع بنجاح!");
+        fetchActive();
+        
+        // إرسال واتساب إرجاع
+        const msg = `تم إرجاع الجهاز (${device}) بنجاح وإغلاق العهدة. شكراً لك.`;
+        window.open(`https://wa.me/968${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+    };
+
+    // جلب السجل
+    async function fetchHistory() {
+        const list = document.getElementById('historyList');
+        list.innerHTML = 'جاري التحميل...';
+        const q = query(collection(db, "borrowings"), where("status", "==", "completed"), orderBy("timestamp", "desc"));
+        const snapshot = await getDocs(q);
+        list.innerHTML = '';
+        snapshot.forEach(docSnap => {
+            const r = docSnap.data();
+            const div = document.createElement('div');
+            div.className = 'record-card';
+            div.innerHTML = `
+                <span class="status-badge done-badge">مكتمل</span>
+                <p><strong>الجهاز:</strong> ${r.device}</p>
+                <p><strong>المستلم:</strong> ${r.recName}</p>
+                <p><strong>الاستعارة:</strong> ${r.date} | <strong>الإرجاع:</strong> ${r.returnDate}</p>
+            `;
+            list.appendChild(div);
+        });
+    }
+</script>
+</body>
+</html>
