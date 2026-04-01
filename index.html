@@ -19,7 +19,7 @@
 
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, sans-serif; }
         body { background-color: var(--light); color: var(--dark); padding: 15px; }
-        .container { max-width: 850px; margin: 0 auto; background: var(--white); border-radius: var(--radius); shadow: 0 10px 15px -3px rgba(0,0,0,0.1); overflow: hidden; border: 1px solid var(--border); }
+        .container { max-width: 850px; margin: 0 auto; background: var(--white); border-radius: var(--radius); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); overflow: hidden; border: 1px solid var(--border); }
         
         header { background: var(--primary); color: var(--white); padding: 20px; text-align: center; }
         .live-date { background: #1e4ed8; color: #bfdbfe; font-size: 0.9rem; padding: 5px; text-align: center; font-weight: bold; }
@@ -51,13 +51,11 @@
 
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-        /* إعدادات الطباعة الاحترافية */
         @media print {
             @page { margin: 1cm; }
             body * { visibility: hidden; }
             #printable-area, #printable-area * { visibility: visible; }
             #printable-area { position: absolute; left: 0; top: 0; width: 100%; display: block !important; border: none; }
-            /* إخفاء روابط المتصفح والوقت الافتراضي */
             header, .tabs, .no-print, footer { display: none !important; }
         }
     </style>
@@ -83,7 +81,7 @@
             <div class="form-group"><label>رقم هاتف المُسلم:</label><input type="tel" id="givPhone" required></div>
             <div class="form-group">
                 <label>نوع الجهاز:</label>
-                <select id="deviceName" required><option value="TAB">TAB</option></select>
+                <select id="deviceName" required><option value="HUAWEI TAB">HUAWEI TAB</option></select>
             </div>
             <button type="submit" class="btn btn-primary" id="saveBtn"><i class="fas fa-save"></i> حفظ العهدة</button>
         </form>
@@ -158,12 +156,12 @@
         try {
             await addDoc(collection(db, "orders"), data);
             
-            // تجهيز بيانات الطباعة الفورية
             document.getElementById('lastActionCard').innerHTML = `
                 <div class="card">
                     <h4>إيصال استلام عهدة (نشط)</h4>
-                    <p><strong>اسم الجهاز:</strong> ${data.device}</p>
+                    <p><strong>الجهاز:</strong> ${data.device}</p>
                     <p><strong>المستلم:</strong> ${data.recName}</p>
+                    <p><strong>رقم الهاتف:</strong> ${data.recPhone}</p>
                     <p><strong>المُسلم:</strong> ${data.givName}</p>
                     <p><strong>تاريخ الاستعارة:</strong> ${data.borrowDate}</p>
                 </div>
@@ -196,6 +194,7 @@
                         <span class="badge badge-active no-print">نشط</span>
                         <h4>جهاز: ${r.device}</h4>
                         <p><strong>المستلم:</strong> ${r.recName}</p>
+                        <p><strong>رقم الهاتف:</strong> ${r.recPhone}</p>
                         <p><strong>تاريخ الاستعارة:</strong> ${r.borrowDate}</p>
                         <button class="btn btn-outline no-print" onclick="prepareAndPrint('${cardId}')"><i class="fas fa-print"></i> طباعة الإيصال</button>
                     </div>`;
@@ -248,6 +247,7 @@
                     <span class="badge badge-done no-print">مكتمل</span>
                     <h4>جهاز: ${r.device}</h4>
                     <p><strong>المستلم:</strong> ${r.recName}</p>
+                    <p><strong>رقم الهاتف:</strong> ${r.recPhone}</p>
                     <p><strong>تاريخ الاستعارة:</strong> ${r.borrowDate}</p>
                     <p><strong>تاريخ الإرجاع:</strong> ${r.returnDate}</p>
                     <button class="btn btn-outline no-print" onclick="prepareAndPrint('${cardId}')"><i class="fas fa-print"></i> طباعة السجل</button>
@@ -255,14 +255,11 @@
         });
     }
 
-    // إصلاح دالة الطباعة لضمان نقل البيانات
     window.prepareAndPrint = (elementId) => {
         const element = document.getElementById(elementId);
         const printArea = document.getElementById('printable-area');
-        
-        // جلب المحتوى مع إزالة الأزرار منه للطباعة
         let cleanContent = element.innerHTML;
-        cleanContent = cleanContent.replace(/<button.*?<\/button>/g, ''); // حذف أي أزرار في المحتوى
+        cleanContent = cleanContent.replace(/<button.*?<\/button>/g, ''); 
 
         printArea.innerHTML = `
             <div style="direction: rtl; text-align: center; border: 3px double #000; padding: 30px; background: #fff;">
@@ -276,11 +273,7 @@
                 </div>
             </div>
         `;
-
-        // تأخير بسيط لضمان تحميل المحتوى في المتصفح قبل عرض نافذة الطباعة
-        setTimeout(() => {
-            window.print();
-        }, 300);
+        setTimeout(() => { window.print(); }, 300);
     };
 
     window.filterReturn = () => {
