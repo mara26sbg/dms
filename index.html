@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>نظام العهد الإلكترونية</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <style>
         :root {
             --primary: #2563eb;
@@ -38,6 +39,7 @@
         .btn { width: 100%; padding: 14px; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; margin-top: 10px; text-decoration: none; }
         .btn-primary { background: var(--primary); color: white; }
         .btn-success { background: var(--success); color: white; }
+        .btn-excel { background: #1d6f42; color: white; }
         .btn-outline { background: white; border: 1px solid var(--border); color: var(--dark); }
         
         .notification-box { display: none; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 20px; border-radius: 8px; margin-top: 20px; text-align: center; }
@@ -56,7 +58,7 @@
             body * { visibility: hidden; }
             #printable-area, #printable-area * { visibility: visible; }
             #printable-area { position: absolute; left: 0; top: 0; width: 100%; display: block !important; border: none; }
-            header, .tabs, .no-print, footer { display: none !important; }
+            header, .tabs, .no-print, .btn, input { display: none !important; }
         }
     </style>
 </head>
@@ -89,17 +91,25 @@
         <div id="borrowWaBox" class="notification-box">
             <p style="color: var(--success); font-weight: bold; margin-bottom: 15px;">تم حفظ البيانات بنجاح!</p>
             <div id="lastActionCard" style="display:none"></div>
-            <a href="#" id="waRecBtn" target="_blank" class="btn-wa"><i class="fab fa-whatsapp"></i> مراسلة المستلم عبر الواتساب</a>
-            <button class="btn btn-outline" onclick="prepareAndPrint('lastActionCard')"><i class="fas fa-print"></i> طباعة إيصال العهدة</button>
+            <a href="#" id="waRecBtn" target="_blank" class="btn-wa"><i class="fab fa-whatsapp"></i> مراسلة المستلم</a>
+            <button class="btn btn-outline" onclick="prepareAndPrint('lastActionCard', 'إيصال استلام عهدة')"><i class="fas fa-print"></i> طباعة إيصال العهدة</button>
         </div>
     </div>
 
     <div id="active-view" class="tab-content"><div id="activeList"></div></div>
+
     <div id="return-view" class="tab-content">
         <input type="text" id="searchReturn" placeholder="ابحث برقم هاتف المستلم..." onkeyup="filterReturn()" style="margin-bottom: 15px;">
         <div id="returnList"></div>
     </div>
-    <div id="history" class="tab-content"><div id="historyList"></div></div>
+
+    <div id="history" class="tab-content">
+        <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+            <button class="btn btn-excel" onclick="exportToExcel()"><i class="fas fa-file-excel"></i> تصدير إكسل</button>
+            <button class="btn btn-outline" onclick="prepareAndPrint('historyList', 'سجل العهد المكتملة')"><i class="fas fa-print"></i> طباعة السجل</button>
+        </div>
+        <div id="historyList"></div>
+    </div>
 </div>
 
 <div id="printable-area" style="display: none;"></div>
@@ -129,7 +139,7 @@
 
     window.switchTab = (id) => {
         document.querySelectorAll('.tab-btn, .tab-content').forEach(el => el.classList.remove('active'));
-        const btn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.onclick.toString().includes(id));
+        const btn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.getAttribute('onclick').includes(id));
         if(btn) btn.classList.add('active');
         document.getElementById(id).classList.add('active');
         if(id === 'active-view') fetchActive();
@@ -155,24 +165,19 @@
 
         try {
             await addDoc(collection(db, "orders"), data);
-            
             document.getElementById('lastActionCard').innerHTML = `
                 <div class="card">
-                    <h4>إيصال استلام عهدة (نشط)</h4>
                     <p><strong>الجهاز:</strong> ${data.device}</p>
                     <p><strong>المستلم:</strong> ${data.recName}</p>
                     <p><strong>رقم الهاتف:</strong> ${data.recPhone}</p>
                     <p><strong>المُسلم:</strong> ${data.givName}</p>
                     <p><strong>تاريخ الاستعارة:</strong> ${data.borrowDate}</p>
-                </div>
-            `;
-
+                </div>`;
             const msg = `نظام العهد: تم تسجيل جهاز (${data.device}) بعهدة ${data.recName} بتاريخ ${data.borrowDate}.`;
             document.getElementById('waRecBtn').href = `https://api.whatsapp.com/send?phone=968${data.recPhone}&text=${encodeURIComponent(msg)}`;
-            
             document.getElementById('borrowWaBox').style.display = 'block';
             document.getElementById('borrowForm').reset();
-            alert("تم حفظ البيانات بنجاح");
+            alert("تم الحفظ بنجاح");
         } catch (err) { alert("خطأ في الاتصال"); }
         btn.disabled = false;
     });
@@ -180,26 +185,22 @@
     async function fetchActive() {
         const container = document.getElementById('activeList');
         container.innerHTML = 'جاري التحميل...';
-        try {
-            const snap = await getDocs(query(collection(db, "orders"), where("status", "==", "active")));
-            let docs = [];
-            snap.forEach(d => docs.push({id: d.id, ...d.data()}));
-            docs.sort((a, b) => b.timestamp - a.timestamp);
-
-            container.innerHTML = docs.length === 0 ? '<p style="text-align:center">لا توجد عهد نشطة</p>' : '';
-            docs.forEach(r => {
-                const cardId = `card-act-${r.id}`;
-                container.innerHTML += `
-                    <div class="card" id="${cardId}">
-                        <span class="badge badge-active no-print">نشط</span>
-                        <h4>جهاز: ${r.device}</h4>
-                        <p><strong>المستلم:</strong> ${r.recName}</p>
-                        <p><strong>رقم الهاتف:</strong> ${r.recPhone}</p>
-                        <p><strong>تاريخ الاستعارة:</strong> ${r.borrowDate}</p>
-                        <button class="btn btn-outline no-print" onclick="prepareAndPrint('${cardId}')"><i class="fas fa-print"></i> طباعة الإيصال</button>
-                    </div>`;
-            });
-        } catch(e) { container.innerHTML = "خطأ في جلب البيانات"; }
+        const snap = await getDocs(query(collection(db, "orders"), where("status", "==", "active")));
+        let docs = [];
+        snap.forEach(d => docs.push({id: d.id, ...d.data()}));
+        docs.sort((a, b) => b.timestamp - a.timestamp);
+        container.innerHTML = docs.length === 0 ? '<p style="text-align:center">لا توجد عهد نشطة</p>' : '';
+        docs.forEach(r => {
+            const cardId = `card-act-${r.id}`;
+            container.innerHTML += `
+                <div class="card" id="${cardId}">
+                    <span class="badge badge-active no-print">نشط</span>
+                    <h4>جهاز: ${r.device}</h4>
+                    <p><strong>المستلم:</strong> ${r.recName} (${r.recPhone})</p>
+                    <p><strong>تاريخ الاستعارة:</strong> ${r.borrowDate}</p>
+                    <button class="btn btn-outline no-print" onclick="prepareAndPrint('${cardId}', 'بيانات عهدة نشطة')"><i class="fas fa-print"></i> طباعة</button>
+                </div>`;
+        });
     }
 
     window.fetchForReturn = async () => {
@@ -215,19 +216,17 @@
             div.innerHTML = `
                 <h4>جهاز: ${r.device}</h4>
                 <p><strong>المستلم:</strong> ${r.recName} (${r.recPhone})</p>
-                <p><strong>تاريخ الاستعارة:</strong> ${r.borrowDate}</p>
-                <button class="btn btn-success" id="btn-${d.id}"><i class="fas fa-check"></i> تأكيد الإرجاع</button>
-            `;
+                <button class="btn btn-success" id="btn-${d.id}"><i class="fas fa-check"></i> تأكيد الإرجاع</button>`;
             container.appendChild(div);
             document.getElementById(`btn-${d.id}`).onclick = () => confirmReturn(d.id, r.recPhone, r.device, r.recName);
         });
     };
 
     window.confirmReturn = async (id, phone, device, name) => {
-        if(!confirm(`تأكيد استلام ${device} من ${name}؟`)) return;
+        if(!confirm(`تأكيد استلام ${device}؟`)) return;
         const rDate = getFullDate();
         await updateDoc(doc(db, "orders", id), { status: 'done', returnDate: rDate, returnTimestamp: Date.now() });
-        window.open(`https://api.whatsapp.com/send?phone=968${phone}&text=${encodeURIComponent("نظام العهد: تم استلام ("+device+") بنجاح بتاريخ "+rDate)}`, '_blank');
+        window.open(`https://api.whatsapp.com/send?phone=968${phone}&text=${encodeURIComponent("نظام العهد: تم استلام ("+device+") بتاريخ "+rDate)}`, '_blank');
         fetchForReturn();
     };
 
@@ -238,41 +237,45 @@
         let docs = [];
         snap.forEach(d => docs.push({id: d.id, ...d.data()}));
         docs.sort((a, b) => b.returnTimestamp - a.returnTimestamp);
-
         container.innerHTML = docs.length === 0 ? '<p style="text-align:center">السجل فارغ</p>' : '';
         docs.forEach(r => {
-            const cardId = `card-hist-${r.id}`;
             container.innerHTML += `
-                <div class="card" id="${cardId}">
+                <div class="card">
                     <span class="badge badge-done no-print">مكتمل</span>
                     <h4>جهاز: ${r.device}</h4>
-                    <p><strong>المستلم:</strong> ${r.recName}</p>
-                    <p><strong>رقم الهاتف:</strong> ${r.recPhone}</p>
-                    <p><strong>تاريخ الاستعارة:</strong> ${r.borrowDate}</p>
-                    <p><strong>تاريخ الإرجاع:</strong> ${r.returnDate}</p>
-                    <button class="btn btn-outline no-print" onclick="prepareAndPrint('${cardId}')"><i class="fas fa-print"></i> طباعة السجل</button>
+                    <p><strong>المستلم:</strong> ${r.recName} (${r.recPhone})</p>
+                    <p><strong>الاستعارة:</strong> ${r.borrowDate} | <strong>الإرجاع:</strong> ${r.returnDate}</p>
                 </div>`;
         });
     }
 
-    window.prepareAndPrint = (elementId) => {
-        const element = document.getElementById(elementId);
-        const printArea = document.getElementById('printable-area');
-        let cleanContent = element.innerHTML;
-        cleanContent = cleanContent.replace(/<button.*?<\/button>/g, ''); 
+    window.exportToExcel = async () => {
+        const snap = await getDocs(collection(db, "orders"));
+        const data = [];
+        snap.forEach(doc => {
+            const r = doc.data();
+            data.push({
+                "المستلم": r.recName, "الهاتف": r.recPhone, "الجهاز": r.device,
+                "تاريخ الاستعارة": r.borrowDate, "تاريخ الإرجاع": r.returnDate || "-", "الحالة": r.status
+            });
+        });
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "العهد");
+        XLSX.writeFile(wb, `سجل_العهد_${new Date().toLocaleDateString()}.xlsx`);
+    };
 
+    window.prepareAndPrint = (elementId, title) => {
+        const content = document.getElementById(elementId).innerHTML;
+        const printArea = document.getElementById('printable-area');
         printArea.innerHTML = `
-            <div style="direction: rtl; text-align: center; border: 3px double #000; padding: 30px; background: #fff;">
-                <h1 style="margin-bottom: 10px; color: #2563eb;">نظام العهد الإلكترونية</h1>
-                <p style="margin-bottom: 20px; font-size: 1.1rem; border-bottom: 1px solid #000; padding-bottom: 10px;">إيصال رسمي لإثبات الحالة</p>
-                <div style="text-align: right; line-height: 2; font-size: 1.3rem;">
-                    ${cleanContent}
-                </div>
-                <div style="margin-top: 50px; text-align: center; font-size: 0.9rem;">
-                    تاريخ طباعة التقرير: ${getFullDate()}
-                </div>
-            </div>
-        `;
+            <div style="direction: rtl; text-align: center; border: 2px solid #000; padding: 20px;">
+                <h1 style="color: #2563eb;">نظام العهد الإلكترونية</h1>
+                <h3>${title}</h3>
+                <hr style="margin: 20px 0;">
+                <div style="text-align: right; font-size: 1.2rem;">${content}</div>
+                <p style="margin-top: 30px; font-size: 0.8rem;">طُبع في: ${getFullDate()}</p>
+            </div>`;
         setTimeout(() => { window.print(); }, 300);
     };
 
